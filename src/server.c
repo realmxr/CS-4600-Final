@@ -13,32 +13,28 @@
 #include <stdlib.h>
 #include <string.h>
 
-// Default RSA key size. (strong enough for our purposes)
-#define DEFAULT_RSA_BITS 3072
+// Industry standard RSA key size.
+#define DEFAULT_RSA_BITS 2048
 
 // Print CLI help/usage banner.
 static void print_usage(void) {
     printf("Secure Receiver (server) utility\n");
     printf("Usage:\n");
-    printf("  server --gen-keys <private.pem> <public.pem> [bits]\n");
-    printf("  server --receive <transmitted.bin> <receiver_private.pem> <plaintext_out.txt>\n");
+    printf("  server --gen-keys <private.pem> <public.pem>\n");
+    printf("  server --receive <receiver_private.pem> <plaintext_out.txt>\n");
 }
 
 // Handle `--gen-keys` CLI command.
 static int handle_generate_keys(int argc, char **argv) {
-    if (argc < 4) {
-        fprintf(stderr, "Missing arguments for --gen-keys\n");
+    if (argc != 4) {
+        fprintf(stderr, "Expected exactly two paths for --gen-keys\n");
         print_usage();
         return 1;
     }
 
     const char *priv = argv[2];
     const char *pub = argv[3];
-    int bits = (argc >= 5) ? atoi(argv[4]) : DEFAULT_RSA_BITS;
-    if (bits < 2048) {
-        fprintf(stderr, "RSA key size must be at least 2048 bits\n");
-        return 1;
-    }
+    const int bits = DEFAULT_RSA_BITS; // Utilize default RSA key size
 
     if (!generate_rsa_keypair(priv, pub, bits)) {
         fprintf(stderr, "Key generation failed\n");
@@ -53,15 +49,15 @@ static int handle_generate_keys(int argc, char **argv) {
 
 // Handle `--receive` CLI command.
 static int handle_receive(int argc, char **argv) {
-    if (argc < 5) {
-        fprintf(stderr, "Missing arguments for --receive\n");
+    if (argc != 4) {
+        fprintf(stderr, "Expected private key and output path for --receive\n");
         print_usage();
         return 1;
     }
 
-    const char *transmission_path = argv[2];
-    const char *priv_key_path = argv[3];
-    const char *output_plain_path = argv[4];
+    const char *transmission_path = "ciphertext.bin";
+    const char *priv_key_path = argv[2];
+    const char *output_plain_path = argv[3];
 
     TransmissionPackage pkg;
     unsigned char aes_key[AES_KEY_SIZE];

@@ -14,31 +14,28 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define DEFAULT_RSA_BITS 3072
+// Industry standard RSA key size.
+#define DEFAULT_RSA_BITS 2048
 
 // Print CLI help/usage banner.
 static void print_usage(void) {
     printf("Secure Sender (client) utility\n");
     printf("Usage:\n");
-    printf("  client --gen-keys <private.pem> <public.pem> [bits]\n");
-    printf("  client --send <plaintext.txt> <receiver_public.pem> <transmitted.bin>\n");
+    printf("  client --gen-keys <private.pem> <public.pem>\n");
+    printf("  client --send <plaintext.txt> <receiver_public.pem>\n");
 }
 
 // Handle `--gen-keys` CLI command.
 static int handle_generate_keys(int argc, char **argv) {
-    if (argc < 4) {
-        fprintf(stderr, "Missing arguments for --gen-keys\n");
+    if (argc != 4) {
+        fprintf(stderr, "Expected exactly two paths for --gen-keys\n");
         print_usage();
         return 1;
     }
 
     const char *priv = argv[2];
     const char *pub = argv[3];
-    int bits = (argc >= 5) ? atoi(argv[4]) : DEFAULT_RSA_BITS;
-    if (bits < 2048) {
-        fprintf(stderr, "RSA key size must be at least 2048 bits\n");
-        return 1;
-    }
+    const int bits = DEFAULT_RSA_BITS; // Utilize default RSA key size
 
     if (!generate_rsa_keypair(priv, pub, bits)) {
         fprintf(stderr, "Key generation failed\n");
@@ -53,15 +50,15 @@ static int handle_generate_keys(int argc, char **argv) {
 
 // Handle `--send` CLI command.
 static int handle_send(int argc, char **argv) {
-    if (argc < 5) {
-        fprintf(stderr, "Missing arguments for --send\n");
+    if (argc != 4) {
+        fprintf(stderr, "Expected plaintext and receiver key paths for --send\n");
         print_usage();
         return 1;
     }
 
     const char *plaintext_path = argv[2];
     const char *receiver_pub_path = argv[3];
-    const char *output_path = argv[4];
+    const char *output_path = "ciphertext.bin";
 
     unsigned char *plaintext = NULL;
     size_t plaintext_len = 0;

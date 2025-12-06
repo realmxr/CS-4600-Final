@@ -1,4 +1,4 @@
-CC ?= gcc
+asdfCC ?= gcc
 CFLAGS ?= -Wall -Wextra -pedantic -std=c11
 OPENSSL_LIBS ?= -lcrypto
 SRC = src/crypto_utils.c src/transmission.c
