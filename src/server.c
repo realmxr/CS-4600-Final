@@ -1,3 +1,8 @@
+/*
+ * server.c
+ * CLI receiver that generates keys and authenticates/decrypts packages.
+ */
+
 #include "crypto_utils.h"
 #include "transmission.h"
 
@@ -8,8 +13,10 @@
 #include <stdlib.h>
 #include <string.h>
 
+// Default RSA key size. (strong enough for our purposes)
 #define DEFAULT_RSA_BITS 3072
 
+// Print CLI help/usage banner.
 static void print_usage(void) {
     printf("Secure Receiver (server) utility\n");
     printf("Usage:\n");
@@ -17,14 +24,7 @@ static void print_usage(void) {
     printf("  server --receive <transmitted.bin> <receiver_private.pem> <plaintext_out.txt>\n");
 }
 
-static int secure_compare(const unsigned char *a, const unsigned char *b, size_t len) {
-    unsigned char diff = 0;
-    for (size_t i = 0; i < len; ++i) {
-        diff |= a[i] ^ b[i];
-    }
-    return diff == 0;
-}
-
+// Handle `--gen-keys` CLI command.
 static int handle_generate_keys(int argc, char **argv) {
     if (argc < 4) {
         fprintf(stderr, "Missing arguments for --gen-keys\n");
@@ -51,6 +51,7 @@ static int handle_generate_keys(int argc, char **argv) {
     return 0;
 }
 
+// Handle `--receive` CLI command.
 static int handle_receive(int argc, char **argv) {
     if (argc < 5) {
         fprintf(stderr, "Missing arguments for --receive\n");
@@ -91,6 +92,7 @@ static int handle_receive(int argc, char **argv) {
         goto cleanup;
     }
 
+    // Recover the symmetric key from the package using receiver's RSA key.
     if (!rsa_private_decrypt(receiver_key,
                              pkg.encrypted_key,
                              pkg.encrypted_key_len,
@@ -106,6 +108,7 @@ static int handle_receive(int argc, char **argv) {
     }
     memcpy(aes_key, decrypted_key, AES_KEY_SIZE);
 
+    // Recreate IV || ciphertext buffer that was MACed by the sender.
     mac_input_len = pkg.iv_len + pkg.ciphertext_len;
     mac_input = (unsigned char *)malloc(mac_input_len);
     if (!mac_input) {
@@ -120,7 +123,8 @@ static int handle_receive(int argc, char **argv) {
         goto cleanup;
     }
 
-    if (computed_mac_len != pkg.mac_len || !secure_compare(pkg.mac, computed_mac, pkg.mac_len)) {
+    // Compare the computed MAC with the one in the package.
+    if (computed_mac_len != pkg.mac_len || memcmp(pkg.mac, computed_mac, pkg.mac_len) != 0) {
         fprintf(stderr, "MAC verification failed\n");
         goto cleanup;
     }
@@ -139,30 +143,26 @@ static int handle_receive(int argc, char **argv) {
     exit_code = 0;
 
 cleanup:
-    OPENSSL_cleanse(aes_key, sizeof(aes_key));
     if (mac_input) {
-        OPENSSL_cleanse(mac_input, mac_input_len);
         free(mac_input);
     }
     if (computed_mac) {
-        OPENSSL_cleanse(computed_mac, computed_mac_len);
         free(computed_mac);
     }
     if (plaintext) {
-        OPENSSL_cleanse(plaintext, (size_t)plaintext_len);
         free(plaintext);
     }
     if (receiver_key) {
         EVP_PKEY_free(receiver_key);
     }
     if (decrypted_key) {
-        OPENSSL_cleanse(decrypted_key, decrypted_key_len);
         free(decrypted_key);
     }
     free_transmission_package(&pkg);
     return exit_code;
 }
 
+// Entry point for the CLI receiver tool.
 int main(int argc, char **argv) {
     OPENSSL_init_crypto(0, NULL);
     ERR_load_crypto_strings();

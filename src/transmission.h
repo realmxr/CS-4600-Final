@@ -1,3 +1,8 @@
+/*
+ * transmission.h
+ * Structures and prototypes for serialized package handling.
+ */
+
 #ifndef TRANSMISSION_H
 #define TRANSMISSION_H
 

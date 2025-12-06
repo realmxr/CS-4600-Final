@@ -1,3 +1,8 @@
+/*
+ * crypto_utils.h
+ * Public interface for RSA, AES, HMAC, and file I/O helpers.
+ */
+
 #ifndef CRYPTO_UTILS_H
 #define CRYPTO_UTILS_H
 

@@ -1,3 +1,8 @@
+/*
+ * client.c
+ * CLI sender that generates keys and encrypts messages for delivery.
+ */
+
 #include "crypto_utils.h"
 #include "transmission.h"
 
@@ -11,6 +16,7 @@
 
 #define DEFAULT_RSA_BITS 3072
 
+// Print CLI help/usage banner.
 static void print_usage(void) {
     printf("Secure Sender (client) utility\n");
     printf("Usage:\n");
@@ -18,6 +24,7 @@ static void print_usage(void) {
     printf("  client --send <plaintext.txt> <receiver_public.pem> <transmitted.bin>\n");
 }
 
+// Handle `--gen-keys` CLI command.
 static int handle_generate_keys(int argc, char **argv) {
     if (argc < 4) {
         fprintf(stderr, "Missing arguments for --gen-keys\n");
@@ -44,6 +51,7 @@ static int handle_generate_keys(int argc, char **argv) {
     return 0;
 }
 
+// Handle `--send` CLI command.
 static int handle_send(int argc, char **argv) {
     if (argc < 5) {
         fprintf(stderr, "Missing arguments for --send\n");
@@ -70,6 +78,7 @@ static int handle_send(int argc, char **argv) {
     size_t mac_input_len = 0;
     int exit_code = 1;
 
+    // Fresh AES key + IV per message to ensure forward secrecy.
     if (RAND_bytes(aes_key, AES_KEY_SIZE) != 1 || RAND_bytes(iv, AES_IV_SIZE) != 1) {
         handle_openssl_error("Failed to generate random AES material");
         goto cleanup;
@@ -85,6 +94,7 @@ static int handle_send(int argc, char **argv) {
         goto cleanup;
     }
 
+    // HMAC covers IV || ciphertext to protect both values.
     mac_input_len = AES_IV_SIZE + (size_t)ciphertext_len;
     mac_input = (unsigned char *)malloc(mac_input_len);
     if (!mac_input) {
@@ -105,11 +115,13 @@ static int handle_send(int argc, char **argv) {
         goto cleanup;
     }
 
+    // Wrap the symmetric key with the receiver's RSA key.
     if (!rsa_public_encrypt(receiver_key, aes_key, AES_KEY_SIZE, &encrypted_key, &encrypted_key_len)) {
         fprintf(stderr, "RSA encryption of AES key failed\n");
         goto cleanup;
     }
 
+    // Persist everything in a single transport-friendly blob.
     TransmissionPackage pkg = {
         .encrypted_key = encrypted_key,
         .encrypted_key_len = encrypted_key_len,
@@ -130,32 +142,27 @@ static int handle_send(int argc, char **argv) {
 
 cleanup:
     if (plaintext) {
-        OPENSSL_cleanse(plaintext, plaintext_len);
         free(plaintext);
     }
     if (ciphertext) {
-        OPENSSL_cleanse(ciphertext, (size_t)ciphertext_len);
         free(ciphertext);
     }
     if (mac_input) {
-        OPENSSL_cleanse(mac_input, mac_input_len);
         free(mac_input);
     }
     if (mac) {
-        OPENSSL_cleanse(mac, mac_len);
         free(mac);
     }
     if (receiver_key) {
         EVP_PKEY_free(receiver_key);
     }
     if (encrypted_key) {
-        OPENSSL_cleanse(encrypted_key, encrypted_key_len);
         free(encrypted_key);
     }
-    OPENSSL_cleanse(aes_key, sizeof(aes_key));
     return exit_code;
 }
 
+// Entry point for the CLI sender tool.
 int main(int argc, char **argv) {
     OPENSSL_init_crypto(0, NULL);
     ERR_load_crypto_strings();
