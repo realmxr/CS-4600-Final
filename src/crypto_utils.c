@@ -119,7 +119,7 @@ EVP_PKEY *load_private_key(const char *path) {
     return load_key(path, 1);
 }
 
-// Read an entire file into memory; caller owns the returned buffer.
+// Read an entire file into memory, caller owns the returned buffer.
 int read_whole_file(const char *path, unsigned char **buffer, size_t *len) {
     FILE *fp = fopen(path, "rb");
     if (!fp) {
@@ -384,5 +384,94 @@ int rsa_private_decrypt(EVP_PKEY *private_key,
                         unsigned char **plaintext,
                         size_t *plaintext_len) {
     return rsa_transform(private_key, ciphertext, ciphertext_len, plaintext, plaintext_len, 0);
+}
+
+int rsa_sign(EVP_PKEY *private_key,
+             const unsigned char *data,
+             size_t data_len,
+             unsigned char **signature,
+             size_t *signature_len) {
+    if (!private_key || !signature || !signature_len) {
+        return 0;
+    }
+
+    int success = 0;
+    EVP_MD_CTX *ctx = EVP_MD_CTX_new();
+    unsigned char *sig = NULL;
+    size_t len = 0;
+
+    if (!ctx) {
+        handle_openssl_error("Failed to create digest sign context");
+        goto cleanup;
+    }
+
+    if (EVP_DigestSignInit(ctx, NULL, EVP_sha256(), NULL, private_key) != 1 ||
+        EVP_DigestSignUpdate(ctx, data, data_len) != 1) {
+        handle_openssl_error("DigestSign init/update failed");
+        goto cleanup;
+    }
+
+    if (EVP_DigestSignFinal(ctx, NULL, &len) != 1) {
+        handle_openssl_error("DigestSign sizing failed");
+        goto cleanup;
+    }
+
+    sig = (unsigned char *)malloc(len);
+    if (!sig) {
+        perror("Failed to allocate signature buffer");
+        goto cleanup;
+    }
+
+    if (EVP_DigestSignFinal(ctx, sig, &len) != 1) {
+        handle_openssl_error("DigestSign final failed");
+        goto cleanup;
+    }
+
+    *signature = sig;
+    *signature_len = len;
+    sig = NULL;
+    success = 1;
+
+cleanup:
+    if (sig) {
+        free(sig);
+    }
+    if (ctx) {
+        EVP_MD_CTX_free(ctx);
+    }
+    return success;
+}
+
+int rsa_verify(EVP_PKEY *public_key,
+               const unsigned char *data,
+               size_t data_len,
+               const unsigned char *signature,
+               size_t signature_len) {
+    if (!public_key || !data || !signature) {
+        return 0;
+    }
+
+    int success = 0;
+    EVP_MD_CTX *ctx = EVP_MD_CTX_new();
+    if (!ctx) {
+        handle_openssl_error("Failed to create digest verify context");
+        return 0;
+    }
+
+    if (EVP_DigestVerifyInit(ctx, NULL, EVP_sha256(), NULL, public_key) != 1 ||
+        EVP_DigestVerifyUpdate(ctx, data, data_len) != 1) {
+        handle_openssl_error("DigestVerify init/update failed");
+        goto cleanup;
+    }
+
+    if (EVP_DigestVerifyFinal(ctx, signature, signature_len) != 1) {
+        goto cleanup;
+    }
+
+    success = 1;
+
+cleanup:
+    EVP_MD_CTX_free(ctx);
+    return success;
 }
 

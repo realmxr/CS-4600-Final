@@ -17,6 +17,8 @@ typedef struct {
     size_t ciphertext_len;
     unsigned char *mac;
     size_t mac_len;
+    unsigned char *signature;
+    size_t signature_len;
 } TransmissionPackage;
 
 int write_transmission_package(const char *path, const TransmissionPackage *pkg);

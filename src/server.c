@@ -21,7 +21,7 @@ static void print_usage(void) {
     printf("Secure Receiver (server) utility\n");
     printf("Usage:\n");
     printf("  server --gen-keys <private.pem> <public.pem>\n");
-    printf("  server --receive <receiver_private.pem> <plaintext_out.txt>\n");
+    printf("  server --receive <receiver_private.pem> <sender_public.pem> <plaintext_out.txt>\n");
 }
 
 // Handle `--gen-keys` CLI command.
@@ -49,15 +49,16 @@ static int handle_generate_keys(int argc, char **argv) {
 
 // Handle `--receive` CLI command.
 static int handle_receive(int argc, char **argv) {
-    if (argc != 4) {
-        fprintf(stderr, "Expected private key and output path for --receive\n");
+    if (argc != 5) {
+        fprintf(stderr, "Expected receiver private key, sender public key, and output path for --receive\n");
         print_usage();
         return 1;
     }
 
     const char *transmission_path = "ciphertext.bin";
     const char *priv_key_path = argv[2];
-    const char *output_plain_path = argv[3];
+    const char *sender_pub_path = argv[3];
+    const char *output_plain_path = argv[4];
 
     TransmissionPackage pkg;
     unsigned char aes_key[AES_KEY_SIZE];
@@ -68,6 +69,7 @@ static int handle_receive(int argc, char **argv) {
     unsigned char *plaintext = NULL;
     int plaintext_len = 0;
     EVP_PKEY *receiver_key = NULL;
+    EVP_PKEY *sender_pub = NULL;
     unsigned char *decrypted_key = NULL;
     size_t decrypted_key_len = 0;
     int exit_code = 1;
@@ -85,6 +87,12 @@ static int handle_receive(int argc, char **argv) {
     receiver_key = load_private_key(priv_key_path);
     if (!receiver_key) {
         fprintf(stderr, "Unable to load private key\n");
+        goto cleanup;
+    }
+
+    sender_pub = load_public_key(sender_pub_path);
+    if (!sender_pub) {
+        fprintf(stderr, "Unable to load sender public key\n");
         goto cleanup;
     }
 
@@ -119,6 +127,11 @@ static int handle_receive(int argc, char **argv) {
         goto cleanup;
     }
 
+    if (!rsa_verify(sender_pub, computed_mac, computed_mac_len, pkg.signature, pkg.signature_len)) {
+        fprintf(stderr, "Signature verification failed\n");
+        goto cleanup;
+    }
+
     // Compare the computed MAC with the one in the package.
     if (computed_mac_len != pkg.mac_len || memcmp(pkg.mac, computed_mac, pkg.mac_len) != 0) {
         fprintf(stderr, "MAC verification failed\n");
@@ -150,6 +163,9 @@ cleanup:
     }
     if (receiver_key) {
         EVP_PKEY_free(receiver_key);
+    }
+    if (sender_pub) {
+        EVP_PKEY_free(sender_pub);
     }
     if (decrypted_key) {
         free(decrypted_key);

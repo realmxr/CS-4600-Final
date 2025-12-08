@@ -22,7 +22,7 @@ static void print_usage(void) {
     printf("Secure Sender (client) utility\n");
     printf("Usage:\n");
     printf("  client --gen-keys <private.pem> <public.pem>\n");
-    printf("  client --send <plaintext.txt> <receiver_public.pem>\n");
+    printf("  client --send <plaintext.txt> <receiver_public.pem> <sender_private.pem>\n");
 }
 
 // Handle `--gen-keys` CLI command.
@@ -50,14 +50,15 @@ static int handle_generate_keys(int argc, char **argv) {
 
 // Handle `--send` CLI command.
 static int handle_send(int argc, char **argv) {
-    if (argc != 4) {
-        fprintf(stderr, "Expected plaintext and receiver key paths for --send\n");
+    if (argc != 5) {
+        fprintf(stderr, "Expected plaintext path, receiver public key, and sender private key for --send\n");
         print_usage();
         return 1;
     }
 
     const char *plaintext_path = argv[2];
     const char *receiver_pub_path = argv[3];
+    const char *sender_priv_path = argv[4];
     const char *output_path = "ciphertext.bin";
 
     unsigned char *plaintext = NULL;
@@ -66,10 +67,13 @@ static int handle_send(int argc, char **argv) {
     int ciphertext_len = 0;
     unsigned char *mac = NULL;
     unsigned int mac_len = 0;
+    unsigned char *signature = NULL;
+    size_t signature_len = 0;
     unsigned char *mac_input = NULL;
     unsigned char aes_key[AES_KEY_SIZE];
     unsigned char iv[AES_IV_SIZE];
     EVP_PKEY *receiver_key = NULL;
+    EVP_PKEY *sender_key = NULL;
     unsigned char *encrypted_key = NULL;
     size_t encrypted_key_len = 0;
     size_t mac_input_len = 0;
@@ -112,9 +116,20 @@ static int handle_send(int argc, char **argv) {
         goto cleanup;
     }
 
+    sender_key = load_private_key(sender_priv_path);
+    if (!sender_key) {
+        fprintf(stderr, "Unable to load sender private key\n");
+        goto cleanup;
+    }
+
     // Wrap the symmetric key with the receiver's RSA key.
     if (!rsa_public_encrypt(receiver_key, aes_key, AES_KEY_SIZE, &encrypted_key, &encrypted_key_len)) {
         fprintf(stderr, "RSA encryption of AES key failed\n");
+        goto cleanup;
+    }
+
+    if (!rsa_sign(sender_key, mac, mac_len, &signature, &signature_len)) {
+        fprintf(stderr, "Failed to sign MAC\n");
         goto cleanup;
     }
 
@@ -127,7 +142,9 @@ static int handle_send(int argc, char **argv) {
         .ciphertext = ciphertext,
         .ciphertext_len = (size_t)ciphertext_len,
         .mac = mac,
-        .mac_len = mac_len};
+        .mac_len = mac_len,
+        .signature = signature,
+        .signature_len = signature_len};
 
     if (!write_transmission_package(output_path, &pkg)) {
         fprintf(stderr, "Failed to write transmission file\n");
@@ -153,8 +170,14 @@ cleanup:
     if (receiver_key) {
         EVP_PKEY_free(receiver_key);
     }
+    if (sender_key) {
+        EVP_PKEY_free(sender_key);
+    }
     if (encrypted_key) {
         free(encrypted_key);
+    }
+    if (signature) {
+        free(signature);
     }
     return exit_code;
 }

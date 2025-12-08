@@ -78,7 +78,8 @@ int write_transmission_package(const char *path, const TransmissionPackage *pkg)
     if (!write_block(fp, pkg->encrypted_key, pkg->encrypted_key_len) ||
         !write_block(fp, pkg->iv, pkg->iv_len) ||
         !write_block(fp, pkg->ciphertext, pkg->ciphertext_len) ||
-        !write_block(fp, pkg->mac, pkg->mac_len)) {
+        !write_block(fp, pkg->mac, pkg->mac_len) ||
+        !write_block(fp, pkg->signature, pkg->signature_len)) {
         perror("Failed to write transmission package");
         goto cleanup;
     }
@@ -104,10 +105,11 @@ int read_transmission_package(const char *path, TransmissionPackage *pkg) {
     pkg->iv = read_block(fp, &pkg->iv_len);
     pkg->ciphertext = read_block(fp, &pkg->ciphertext_len);
     pkg->mac = read_block(fp, &pkg->mac_len);
+    pkg->signature = read_block(fp, &pkg->signature_len);
 
     fclose(fp);
 
-    if (!pkg->encrypted_key || !pkg->iv || !pkg->ciphertext || !pkg->mac) {
+    if (!pkg->encrypted_key || !pkg->iv || !pkg->ciphertext || !pkg->mac || !pkg->signature) {
         free_transmission_package(pkg);
         return 0;
     }
@@ -124,6 +126,7 @@ void free_transmission_package(TransmissionPackage *pkg) {
     free(pkg->iv);
     free(pkg->ciphertext);
     free(pkg->mac);
+    free(pkg->signature);
     memset(pkg, 0, sizeof(*pkg));
 }
 

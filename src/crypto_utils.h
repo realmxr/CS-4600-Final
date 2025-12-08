@@ -44,6 +44,18 @@ int compute_hmac_sha256(const unsigned char *key, size_t key_len,
                         const unsigned char *data, size_t data_len,
                         unsigned char **mac, unsigned int *mac_len);
 
+int rsa_sign(EVP_PKEY *private_key,
+             const unsigned char *data,
+             size_t data_len,
+             unsigned char **signature,
+             size_t *signature_len);
+
+int rsa_verify(EVP_PKEY *public_key,
+               const unsigned char *data,
+               size_t data_len,
+               const unsigned char *signature,
+               size_t signature_len);
+
 void handle_openssl_error(const char *msg);
 
 #endif
