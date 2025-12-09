@@ -51,11 +51,13 @@ static unsigned char *read_block(FILE *fp, size_t *len) {
     if (!read_u32_be(fp, &size)) {
         return NULL;
     }
+    // Allocate the buffer
     unsigned char *buffer = (unsigned char *)malloc(size);
     if (!buffer) {
         perror("Failed to allocate buffer");
         return NULL;
     }
+    // Read the block
     if (fread(buffer, 1, size, fp) != size) {
         perror("Failed to read block");
         free(buffer);
@@ -75,6 +77,7 @@ int write_transmission_package(const char *path, const TransmissionPackage *pkg)
 
     int success = 0;
 
+    // Write the package to the file (encrypted key, iv, ciphertext, mac, signature)
     if (!write_block(fp, pkg->encrypted_key, pkg->encrypted_key_len) ||
         !write_block(fp, pkg->iv, pkg->iv_len) ||
         !write_block(fp, pkg->ciphertext, pkg->ciphertext_len) ||
@@ -101,6 +104,7 @@ int read_transmission_package(const char *path, TransmissionPackage *pkg) {
         return 0;
     }
 
+    // Read the package from the file (encrypted key, iv, ciphertext, mac, signature)
     pkg->encrypted_key = read_block(fp, &pkg->encrypted_key_len);
     pkg->iv = read_block(fp, &pkg->iv_len);
     pkg->ciphertext = read_block(fp, &pkg->ciphertext_len);
@@ -109,6 +113,7 @@ int read_transmission_package(const char *path, TransmissionPackage *pkg) {
 
     fclose(fp);
 
+    // Check if the package is valid
     if (!pkg->encrypted_key || !pkg->iv || !pkg->ciphertext || !pkg->mac || !pkg->signature) {
         free_transmission_package(pkg);
         return 0;

@@ -122,11 +122,13 @@ static int handle_receive(int argc, char **argv) {
     memcpy(mac_input, pkg.iv, pkg.iv_len);
     memcpy(mac_input + pkg.iv_len, pkg.ciphertext, pkg.ciphertext_len);
 
+    // Compute the HMAC
     if (!compute_hmac_sha256(aes_key, AES_KEY_SIZE, mac_input, mac_input_len, &computed_mac, &computed_mac_len)) {
         fprintf(stderr, "Failed to compute HMAC\n");
         goto cleanup;
     }
 
+    // Verify the signature
     if (!rsa_verify(sender_pub, computed_mac, computed_mac_len, pkg.signature, pkg.signature_len)) {
         fprintf(stderr, "Signature verification failed\n");
         goto cleanup;
@@ -138,11 +140,13 @@ static int handle_receive(int argc, char **argv) {
         goto cleanup;
     }
 
+    // Decrypt the ciphertext
     if (!aes256_cbc_decrypt(pkg.ciphertext, (int)pkg.ciphertext_len, aes_key, pkg.iv, &plaintext, &plaintext_len)) {
         fprintf(stderr, "AES decryption failed\n");
         goto cleanup;
     }
 
+    // Write the plaintext to the file
     if (!write_whole_file(output_plain_path, plaintext, (size_t)plaintext_len)) {
         fprintf(stderr, "Failed to write plaintext output\n");
         goto cleanup;

@@ -45,6 +45,7 @@ int generate_rsa_keypair(const char *priv_path, const char *pub_path, int bits) 
         goto cleanup;
     }
 
+    // Open key files for writing and check if they are open
     priv = fopen(priv_path, "wb");
     if (!priv) {
         perror("Unable to open private key file for writing");
@@ -192,12 +193,14 @@ int aes256_cbc_encrypt(const unsigned char *plaintext, int plaintext_len,
     int len = 0;
     int total_len = 0;
 
+    // Create a new cipher context
     ctx = EVP_CIPHER_CTX_new();
     if (!ctx) {
         handle_openssl_error("Failed to create cipher context");
         goto cleanup;
     }
 
+    // Initialize the cipher context
     if (EVP_EncryptInit_ex(ctx, EVP_aes_256_cbc(), NULL, key, iv) != 1) {
         handle_openssl_error("EncryptInit failed");
         goto cleanup;
@@ -210,12 +213,14 @@ int aes256_cbc_encrypt(const unsigned char *plaintext, int plaintext_len,
         goto cleanup;
     }
 
+    // Encrypt the plaintext
     if (EVP_EncryptUpdate(ctx, out, &len, plaintext, plaintext_len) != 1) {
         handle_openssl_error("EncryptUpdate failed");
         goto cleanup;
     }
     total_len = len;
 
+    // Finalize the encryption (add padding)
     if (EVP_EncryptFinal_ex(ctx, out + total_len, &len) != 1) {
         handle_openssl_error("EncryptFinal failed");
         goto cleanup;
@@ -247,12 +252,14 @@ int aes256_cbc_decrypt(const unsigned char *ciphertext, int ciphertext_len,
     int len = 0;
     int total_len = 0;
 
+    // Create a new cipher context
     ctx = EVP_CIPHER_CTX_new();
     if (!ctx) {
         handle_openssl_error("Failed to create cipher context");
         goto cleanup;
     }
 
+    // Initialize the cipher context
     if (EVP_DecryptInit_ex(ctx, EVP_aes_256_cbc(), NULL, key, iv) != 1) {
         handle_openssl_error("DecryptInit failed");
         goto cleanup;
@@ -265,12 +272,14 @@ int aes256_cbc_decrypt(const unsigned char *ciphertext, int ciphertext_len,
         goto cleanup;
     }
 
+    // Decrypt the ciphertext
     if (EVP_DecryptUpdate(ctx, out, &len, ciphertext, ciphertext_len) != 1) {
         handle_openssl_error("DecryptUpdate failed");
         goto cleanup;
     }
     total_len = len;
 
+    // Finalize the decryption (remove padding)
     if (EVP_DecryptFinal_ex(ctx, out + total_len, &len) != 1) {
         handle_openssl_error("DecryptFinal failed");
         goto cleanup;
@@ -296,6 +305,7 @@ cleanup:
 int compute_hmac_sha256(const unsigned char *key, size_t key_len,
                         const unsigned char *data, size_t data_len,
                         unsigned char **mac, unsigned int *mac_len) {
+
     // MAC buffer sized for the largest digest OpenSSL can emit.
     unsigned char *buffer = (unsigned char *)malloc(EVP_MAX_MD_SIZE);
     if (!buffer) {
@@ -303,6 +313,7 @@ int compute_hmac_sha256(const unsigned char *key, size_t key_len,
         return 0;
     }
 
+    // Compute the HMAC
     if (!HMAC(EVP_sha256(), key, (int)key_len, data, data_len, buffer, mac_len)) {
         handle_openssl_error("Failed to compute HMAC");
         free(buffer);
@@ -324,12 +335,14 @@ static int rsa_transform(EVP_PKEY *pkey,
         return 0;
     }
 
+    // Create a new RSA context
     EVP_PKEY_CTX *ctx = EVP_PKEY_CTX_new(pkey, NULL);
     if (!ctx) {
         handle_openssl_error("Failed to create EVP_PKEY_CTX");
         return 0;
     }
 
+    // Initialize the RSA context
     int ok = 0;
     if ((encrypt ? EVP_PKEY_encrypt_init(ctx) : EVP_PKEY_decrypt_init(ctx)) <= 0 ||
         EVP_PKEY_CTX_set_rsa_padding(ctx, RSA_PKCS1_OAEP_PADDING) <= 0) {
@@ -337,6 +350,7 @@ static int rsa_transform(EVP_PKEY *pkey,
         goto cleanup;
     }
 
+    // Size the RSA output so we know how much to allocate.
     size_t len = 0;
     // First call sizes the RSA output so we know how much to allocate.
     if ((encrypt ? EVP_PKEY_encrypt(ctx, NULL, &len, input, input_len)
@@ -345,6 +359,7 @@ static int rsa_transform(EVP_PKEY *pkey,
         goto cleanup;
     }
 
+    // Allocate the RSA buffer
     unsigned char *buf = (unsigned char *)malloc(len);
     if (!buf) {
         perror("Failed to allocate RSA buffer");
@@ -386,6 +401,7 @@ int rsa_private_decrypt(EVP_PKEY *private_key,
     return rsa_transform(private_key, ciphertext, ciphertext_len, plaintext, plaintext_len, 0);
 }
 
+// Sign data with the private key
 int rsa_sign(EVP_PKEY *private_key,
              const unsigned char *data,
              size_t data_len,
@@ -400,28 +416,33 @@ int rsa_sign(EVP_PKEY *private_key,
     unsigned char *sig = NULL;
     size_t len = 0;
 
+    // Create a new digest sign context
     if (!ctx) {
         handle_openssl_error("Failed to create digest sign context");
         goto cleanup;
     }
 
+    // Initialize the digest sign context
     if (EVP_DigestSignInit(ctx, NULL, EVP_sha256(), NULL, private_key) != 1 ||
         EVP_DigestSignUpdate(ctx, data, data_len) != 1) {
         handle_openssl_error("DigestSign init/update failed");
         goto cleanup;
     }
 
+    // Size the signature so we know how much to allocate.
     if (EVP_DigestSignFinal(ctx, NULL, &len) != 1) {
         handle_openssl_error("DigestSign sizing failed");
         goto cleanup;
     }
 
+    // Allocate the signature buffer
     sig = (unsigned char *)malloc(len);
     if (!sig) {
         perror("Failed to allocate signature buffer");
         goto cleanup;
     }
 
+    // Finalize the signature
     if (EVP_DigestSignFinal(ctx, sig, &len) != 1) {
         handle_openssl_error("DigestSign final failed");
         goto cleanup;
@@ -442,6 +463,7 @@ cleanup:
     return success;
 }
 
+// Verify a signature with the public key
 int rsa_verify(EVP_PKEY *public_key,
                const unsigned char *data,
                size_t data_len,
@@ -451,6 +473,7 @@ int rsa_verify(EVP_PKEY *public_key,
         return 0;
     }
 
+    // Create a new digest verify context
     int success = 0;
     EVP_MD_CTX *ctx = EVP_MD_CTX_new();
     if (!ctx) {
@@ -458,12 +481,14 @@ int rsa_verify(EVP_PKEY *public_key,
         return 0;
     }
 
+    // Initialize the digest verify context
     if (EVP_DigestVerifyInit(ctx, NULL, EVP_sha256(), NULL, public_key) != 1 ||
         EVP_DigestVerifyUpdate(ctx, data, data_len) != 1) {
         handle_openssl_error("DigestVerify init/update failed");
         goto cleanup;
     }
 
+    // Finalize the signature verification
     if (EVP_DigestVerifyFinal(ctx, signature, signature_len) != 1) {
         goto cleanup;
     }

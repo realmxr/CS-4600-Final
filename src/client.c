@@ -90,6 +90,7 @@ static int handle_send(int argc, char **argv) {
         goto cleanup;
     }
 
+    // Encrypt the plaintext
     if (!aes256_cbc_encrypt(plaintext, (int)plaintext_len, aes_key, iv, &ciphertext, &ciphertext_len)) {
         fprintf(stderr, "AES encryption failed\n");
         goto cleanup;
@@ -105,17 +106,20 @@ static int handle_send(int argc, char **argv) {
     memcpy(mac_input, iv, AES_IV_SIZE);
     memcpy(mac_input + AES_IV_SIZE, ciphertext, (size_t)ciphertext_len);
 
+    // Compute the HMAC
     if (!compute_hmac_sha256(aes_key, AES_KEY_SIZE, mac_input, mac_input_len, &mac, &mac_len)) {
         fprintf(stderr, "Failed to compute HMAC\n");
         goto cleanup;
     }
 
+    // Load the receiver public key
     receiver_key = load_public_key(receiver_pub_path);
     if (!receiver_key) {
         fprintf(stderr, "Unable to load receiver public key\n");
         goto cleanup;
     }
 
+    // Load the sender private key
     sender_key = load_private_key(sender_priv_path);
     if (!sender_key) {
         fprintf(stderr, "Unable to load sender private key\n");
@@ -128,6 +132,7 @@ static int handle_send(int argc, char **argv) {
         goto cleanup;
     }
 
+    // Sign the MAC
     if (!rsa_sign(sender_key, mac, mac_len, &signature, &signature_len)) {
         fprintf(stderr, "Failed to sign MAC\n");
         goto cleanup;
@@ -146,6 +151,7 @@ static int handle_send(int argc, char **argv) {
         .signature = signature,
         .signature_len = signature_len};
 
+    // Write the package to the file
     if (!write_transmission_package(output_path, &pkg)) {
         fprintf(stderr, "Failed to write transmission file\n");
         goto cleanup;
